@@ -149,6 +149,7 @@ public class VideoEditor extends CordovaPlugin {
                     Environment.getExternalStorageDirectory() + "/Movies",
                     appName
             );
+            mediaStorageDir.setExecutable(true, false);
         } else {
             mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName() + "/files/files/videos");
         }
@@ -195,6 +196,7 @@ public class VideoEditor extends CordovaPlugin {
                         public void onTranscodeCompleted() {
 
                             File outFile = new File(outputFilePath);
+                            outFile.setReadable(true, false);
                             if (!outFile.exists()) {
                                 Log.d(TAG, "outputFile doesn't exist!");
                                 callback.error("an error ocurred during transcoding");
