@@ -19,20 +19,25 @@
         <engine name="cordova" version=">=3.0.0" />
     </engines>
 
-    <!-- android -->
+   <!-- android -->
     <platform name="android">
         <config-file target="config.xml" parent="/*">
             <feature name="VideoEditor">
                 <param name="android-package" value="org.apache.cordova.videoeditor.VideoEditor" />
             </feature>
         </config-file>
-
+        <config-file target="AndroidManifest.xml" parent="/*">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+        </config-file>
+        <edit-config file="AndroidManifest.xml" target="/manifest/uses-sdk" mode="merge">
+            <uses-sdk android:minSdkVersion="18" android:maxSdkVersion="23" />
+        </edit-config>
         <!-- add plugin class -->
         <source-file src="src/android/VideoEditor.java" target-dir="src/org/apache/cordova/videoeditor" />
         <source-file src="src/android/CustomAndroidFormatStrategy.java" target-dir="src/org/apache/cordova/videoeditor" />
-
         <framework src="src/android/build.gradle" custom="true" type="gradleReference" />
-
     </platform>
 
     <!-- ios -->
