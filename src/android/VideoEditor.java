@@ -32,6 +32,8 @@ import android.util.Log;
 
 import net.ypresto.androidtranscoder.MediaTranscoder;
 
+import com.vincent.videocompressor.VideoCompress;
+
 /**
  * VideoEditor plugin for Android
  * Created by Ross Martin 2-2-15
@@ -170,78 +172,57 @@ public class VideoEditor extends CordovaPlugin {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
 
-                try {
+                try {                    
+                    VideoCompress.compressVideoLow(videoSrcPath,
+                            outputFilePath,
+                            new VideoCompress.CompressListener() {
+                                @Override
+                                public void onSuccess() {
+                                    File outFile = new File(outputFilePath);
+                                    if (!outFile.exists()) {
+                                        Log.d(TAG, "outputFile doesn't exist!");
+                                        callback.error("an error ocurred during transcoding");
+                                        return;
+                                    }
 
-                    FileInputStream fin = new FileInputStream(inFile);
+                                    // make the gallery display the new file if saving to library
+                                    if (saveToLibrary) {
+                                        Intent scanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+                                        scanIntent.setData(Uri.fromFile(inFile));
+                                        scanIntent.setData(Uri.fromFile(outFile));
+                                        appContext.sendBroadcast(scanIntent);
+                                    }
 
-                    MediaTranscoder.Listener listener = new MediaTranscoder.Listener() {
-                        @Override
-                        public void onTranscodeProgress(double progress) {
-                            Log.d(TAG, "transcode running " + progress);
+                                    if (deleteInputFile) {
+                                        inFile.delete();
+                                    }
 
-                            JSONObject jsonObj = new JSONObject();
-                            try {
-                                jsonObj.put("progress", progress);
-                            } catch (JSONException e) {
-                                e.printStackTrace();
+                                    callback.success(outputFilePath);
+                                }
+
+                                @Override
+                                public void onFail() {
+                                    callback.error("Erreur d'encodage");
+                                    Log.d(TAG, "transcode exception");
+                                }
+
+                                @Override
+                                public void onProgress(float percent) {
+                                    Log.d(TAG, "transcode running " + percent);
+
+                                    JSONObject jsonObj = new JSONObject();
+                                    try {
+                                        jsonObj.put("progress", percent);
+                                    } catch (JSONException e) {
+                                        e.printStackTrace();
+                                    }
+
+                                    PluginResult progressResult = new PluginResult(PluginResult.Status.OK, jsonObj);
+                                    progressResult.setKeepCallback(true);
+                                    callback.sendPluginResult(progressResult);
+                                }
                             }
-
-                            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, jsonObj);
-                            progressResult.setKeepCallback(true);
-                            callback.sendPluginResult(progressResult);
-                        }
-
-                        @Override
-                        public void onTranscodeCompleted() {
-
-                            File outFile = new File(outputFilePath);
-                            if (!outFile.exists()) {
-                                Log.d(TAG, "outputFile doesn't exist!");
-                                callback.error("an error ocurred during transcoding");
-                                return;
-                            }
-
-                            // make the gallery display the new file if saving to library
-                            if (saveToLibrary) {
-                                Intent scanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-                                scanIntent.setData(Uri.fromFile(inFile));
-                                scanIntent.setData(Uri.fromFile(outFile));
-                                appContext.sendBroadcast(scanIntent);
-                            }
-
-                            if (deleteInputFile) {
-                                inFile.delete();
-                            }
-
-                            callback.success(outputFilePath);
-                        }
-
-                        @Override
-                        public void onTranscodeCanceled() {
-                            callback.error("transcode canceled");
-                            Log.d(TAG, "transcode canceled");
-                        }
-
-                        @Override
-                        public void onTranscodeFailed(Exception exception) {
-                            callback.error(exception.toString());
-                            Log.d(TAG, "transcode exception", exception);
-                        }
-                    };
-
-                    MediaMetadataRetriever mmr = new MediaMetadataRetriever();
-                    mmr.setDataSource(videoSrcPath);
-
-                    String orientation;
-                    String mmrOrientation = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
-                    Log.d(TAG, "mmrOrientation: " + mmrOrientation); // 0, 90, 180, or 270
-
-                    float videoWidth = Float.parseFloat(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
-                    float videoHeight = Float.parseFloat(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
-
-                    MediaTranscoder.getInstance().transcodeVideo(fin.getFD(), outputFilePath,
-                            new CustomAndroidFormatStrategy(videoBitrate, fps, width, height), listener, videoDuration);
-
+                    );
                 } catch (Throwable e) {
                     Log.d(TAG, "transcode exception ", e);
                     callback.error(e.toString());
