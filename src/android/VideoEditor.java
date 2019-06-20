@@ -177,6 +177,11 @@ public class VideoEditor extends CordovaPlugin {
                             outputFilePath,
                             new VideoCompress.CompressListener() {
                                 @Override
+                                public void onStart() {
+                                        Log.d(TAG, "transcoding started");
+                                }
+                                
+                                @Override
                                 public void onSuccess() {
                                     File outFile = new File(outputFilePath);
                                     if (!outFile.exists()) {
