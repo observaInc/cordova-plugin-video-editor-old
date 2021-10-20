@@ -32,7 +32,6 @@ VideoEditor.transcodeVideo(
         outputFileType: VideoEditorOptions.OutputFileType.MPEG4, // android is always mp4
         optimizeForNetworkUse: VideoEditorOptions.OptimizeForNetworkUse.YES, // ios only
         saveToLibrary: true, // optional, defaults to true
-        deleteInputFile: false, // optional (android only), defaults to false
         maintainAspectRatio: true, // optional (ios only), defaults to true
         width: 640, // optional, see note below on width and height
         height: 640, // optional, see notes below on width and height
