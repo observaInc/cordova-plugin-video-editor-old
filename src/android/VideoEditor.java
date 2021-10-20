@@ -22,6 +22,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.database.Cursor;
+import android.media.MediaExtractor;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
@@ -31,8 +32,7 @@ import android.provider.MediaStore;
 import android.util.Log;
 
 import net.ypresto.androidtranscoder.MediaTranscoder;
-
-import com.vincent.videocompressor.VideoCompress;
+import net.ypresto.androidtranscoder.utils.MediaExtractorUtils;
 
 /**
  * VideoEditor plugin for Android
@@ -84,23 +84,24 @@ public class VideoEditor extends CordovaPlugin {
      * ARGUMENTS
      * =========
      *
-     * fileUri              - path to input video
-     * outputFileName       - output file name
-     * saveToLibrary        - save to gallery
-     * deleteInputFile      - optionally remove input file
-     * width                - width for the output video
-     * height               - height for the output video
-     * fps                  - fps the video
-     * videoBitrate         - video bitrate for the output video in bits
-     * duration             - max video duration (in seconds?)
+     * fileUri                     - path to input video
+     * outputFileName              - output file name
+     * saveToLibrary               - save to gallery
+     * deleteInputFile             - optionally remove input file
+     * width                       - width for the output video
+     * height                      - height for the output video
+     * fps                         - fps the video
+     * videoBitrate                - video bitrate for the output video in bits
+     * audioBitrate                - audio bitrate for the output video in bits
+     * audioChannels               - number of audio channels
+     * skipVideoTranscodingIfAVC   - skip any transcoding actions (conversion/resizing/etc..) if the input video is avc video
      *
      * RESPONSE
      * ========
      *
      * outputFilePath - path to output file
      *
-     * @param JSONArray args
-     * @return void
+     * @param args arguments
      */
     private void transcodeVideo(JSONArray args) throws JSONException, IOException {
         Log.d(TAG, "transcodeVideo firing");
@@ -122,11 +123,13 @@ public class VideoEditor extends CordovaPlugin {
         );
 
         final boolean deleteInputFile = options.optBoolean("deleteInputFile", false);
-        final int width = options.optInt("width", 0);
-        final int height = options.optInt("height", 0);
-        final int fps = options.optInt("fps", 24);
-        final int videoBitrate = options.optInt("videoBitrate", 1000000); // default to 1 megabit
-        final long videoDuration = options.optLong("duration", 0) * 1000 * 1000;
+        final int width = options.optInt("width", CustomAndroidFormatStrategy.DEFAULT_WIDTH);
+        final int height = options.optInt("height", CustomAndroidFormatStrategy.DEFAULT_HEIGHT);
+        final int fps = options.optInt("fps", CustomAndroidFormatStrategy.DEFAULT_FRAMERATE);
+        final int videoBitrate = options.optInt("videoBitrate", CustomAndroidFormatStrategy.DEFAULT_VIDEO_BITRATE); // default to 9 megabit
+        final int audioBitrate = options.optInt("audioBitrate", CustomAndroidFormatStrategy.AUDIO_BITRATE_AS_IS);
+        final int audioChannels = options.optInt("audioChannels", CustomAndroidFormatStrategy.AUDIO_CHANNELS_AS_IS);
+        final boolean skipVideoTranscodingIfAVC = options.optBoolean("skipVideoTranscodingIfAVC", CustomAndroidFormatStrategy.DEFAULT_SKIP_AVC_VIDEO_TRANSCODING);
 
         Log.d(TAG, "videoSrcPath: " + videoSrcPath);
 
@@ -172,62 +175,82 @@ public class VideoEditor extends CordovaPlugin {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
 
-                try {                    
-                    VideoCompress.compressVideoLow(videoSrcPath,
-                            outputFilePath,
-                            new VideoCompress.CompressListener() {
-                                @Override
-                                public void onStart() {
-                                        Log.d(TAG, "transcoding started");
-                                }
-                                
-                                @Override
-                                public void onSuccess() {
-                                    File outFile = new File(outputFilePath);
-                                    if (!outFile.exists()) {
-                                        Log.d(TAG, "outputFile doesn't exist!");
-                                        callback.error("an error ocurred during transcoding");
-                                        return;
-                                    }
+                try {
 
-                                    // make the gallery display the new file if saving to library
-                                    if (saveToLibrary) {
-                                        Intent scanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-                                        scanIntent.setData(Uri.fromFile(inFile));
-                                        scanIntent.setData(Uri.fromFile(outFile));
-                                        appContext.sendBroadcast(scanIntent);
-                                    }
+                    FileInputStream fin = new FileInputStream(inFile);
 
-                                    if (deleteInputFile) {
-                                        inFile.delete();
-                                    }
+                    MediaTranscoder.Listener listener = new MediaTranscoder.Listener() {
+                        @Override
+                        public void onTranscodeProgress(double progress) {
+                            Log.d(TAG, "transcode running " + progress);
 
-                                    callback.success(outputFilePath);
-                                }
-
-                                @Override
-                                public void onFail() {
-                                    callback.error("Erreur d'encodage");
-                                    Log.d(TAG, "transcode exception");
-                                }
-
-                                @Override
-                                public void onProgress(float percent) {
-                                    Log.d(TAG, "transcode running " + percent);
-
-                                    JSONObject jsonObj = new JSONObject();
-                                    try {
-                                        jsonObj.put("progress", percent);
-                                    } catch (JSONException e) {
-                                        e.printStackTrace();
-                                    }
-
-                                    PluginResult progressResult = new PluginResult(PluginResult.Status.OK, jsonObj);
-                                    progressResult.setKeepCallback(true);
-                                    callback.sendPluginResult(progressResult);
-                                }
+                            JSONObject jsonObj = new JSONObject();
+                            try {
+                                jsonObj.put("progress", progress);
+                            } catch (JSONException e) {
+                                e.printStackTrace();
                             }
+
+                            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, jsonObj);
+                            progressResult.setKeepCallback(true);
+                            callback.sendPluginResult(progressResult);
+                        }
+
+                        @Override
+                        public void onTranscodeCompleted() {
+
+                            File outFile = new File(outputFilePath);
+                            if (!outFile.exists()) {
+                                Log.d(TAG, "outputFile doesn't exist!");
+                                callback.error("an error ocurred during transcoding");
+                                return;
+                            }
+
+                            // make the gallery display the new file if saving to library
+                            if (saveToLibrary) {
+                                Intent scanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+                                scanIntent.setData(Uri.fromFile(inFile));
+                                scanIntent.setData(Uri.fromFile(outFile));
+                                appContext.sendBroadcast(scanIntent);
+                            }
+
+                            if (deleteInputFile) {
+                                inFile.delete();
+                            }
+
+                            callback.success(outputFilePath);
+                        }
+
+                        @Override
+                        public void onTranscodeCanceled() {
+                            callback.error("transcode canceled");
+                            Log.d(TAG, "transcode canceled");
+                        }
+
+                        @Override
+                        public void onTranscodeFailed(Exception exception) {
+                            callback.error(exception.toString());
+                            Log.d(TAG, "transcode exception", exception);
+                        }
+                    };
+
+                    MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+                    mmr.setDataSource(videoSrcPath);
+
+                    String orientation;
+                    String mmrOrientation = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+                    Log.d(TAG, "mmrOrientation: " + mmrOrientation); // 0, 90, 180, or 270
+
+                    float videoWidth = Float.parseFloat(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+                    float videoHeight = Float.parseFloat(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+
+                    MediaTranscoder.getInstance().transcodeVideo(
+                            fin.getFD(),
+                            outputFilePath,
+                            new CustomAndroidFormatStrategy(videoBitrate, fps, width, height, audioBitrate, audioChannels, skipVideoTranscodingIfAVC),
+                            listener
                     );
+
                 } catch (Throwable e) {
                     Log.d(TAG, "transcode exception ", e);
                     callback.error(e.toString());
@@ -256,8 +279,7 @@ public class VideoEditor extends CordovaPlugin {
      *
      * outputFilePath - path to output file
      *
-     * @param JSONArray args
-     * @return void
+     * @param args arguments
      */
     private void createThumbnail(JSONArray args) throws JSONException, IOException {
         Log.d(TAG, "createThumbnail firing");
@@ -388,9 +410,10 @@ public class VideoEditor extends CordovaPlugin {
      * duration      - duration of the video (in seconds)
      * size          - size of the video (in bytes)
      * bitrate       - bitrate of the video (in bits per second)
+     * videoMime     - MIME type of the video
+     * audioMime     - MIME type of the audio track in video
      *
-     * @param JSONArray args
-     * @return void
+     * @param args arguments
      */
     private void getVideoInfo(JSONArray args) throws JSONException, IOException {
         Log.d(TAG, "getVideoInfo firing");
@@ -438,6 +461,27 @@ public class VideoEditor extends CordovaPlugin {
         double duration = Double.parseDouble(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)) / 1000.0;
         long bitrate = Long.parseLong(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE));
 
+        String videoMime = null;
+        String audioMime = null;
+        try {
+            final MediaExtractor mExtractor = new MediaExtractor();
+            final FileInputStream fin = new FileInputStream(inFile);
+            mExtractor.setDataSource(fin.getFD());
+            MediaExtractorUtils.TrackResult trackResult = MediaExtractorUtils.getFirstVideoAndAudioTrack(mExtractor);
+
+            // get types
+            videoMime = trackResult.mVideoTrackMime;
+            audioMime = trackResult.mAudioTrackMime;
+
+            // release resources
+            mExtractor.release();
+            fin.close();
+            trackResult = null;
+        } catch (Throwable e) {
+            // nothing
+            Log.e(TAG, e.toString());
+        }
+
         JSONObject response = new JSONObject();
         response.put("width", videoWidth);
         response.put("height", videoHeight);
@@ -445,6 +489,8 @@ public class VideoEditor extends CordovaPlugin {
         response.put("duration", duration);
         response.put("size", inFile.length());
         response.put("bitrate", bitrate);
+        response.put("videoMime", videoMime);
+        response.put("audioMime", audioMime);
 
         callback.success(response);
     }

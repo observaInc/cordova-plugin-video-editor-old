@@ -36,11 +36,12 @@ VideoEditor.transcodeVideo(
         maintainAspectRatio: true, // optional (ios only), defaults to true
         width: 640, // optional, see note below on width and height
         height: 640, // optional, see notes below on width and height
-        videoBitrate: 1000000, // optional, bitrate in bits, defaults to 1 megabit (1000000)
-        fps: 24, // optional (android only), defaults to 24
-        audioChannels: 2, // optional (ios only), number of audio channels, defaults to 2
+        videoBitrate: 1000000, // optional, bitrate in bits, defaults to 9 megabit (9000000)
+        fps: 30, // optional (android only), defaults to 30
+        audioChannels: 2, // optional, number of audio channels, defaults: iOS - 2, Android - as is
         audioSampleRate: 44100, // optional (ios only), sample rate for the audio, defaults to 44100
-        audioBitrate: 128000, // optional (ios only), audio bitrate for the video in bits, defaults to 128 kilobits (128000)
+        audioBitrate: 128000, // optional, audio bitrate for the video in bits,  defaults: iOS - 128000 (128 kilobits), Android - as is or 128000
+        skipVideoTranscodingIfAVC: true, // optional (android only), skip any transcoding actions (conversion/resizing/etc..) if the input video is avc video, defaults to false
         progress: function(info) {} // info will be a number from 0 to 100
     }
 );
@@ -243,7 +244,9 @@ function getVideoInfoSuccess(info) {
         orientation: 'landscape', // will be portrait or landscape
         duration: 3.541, // duration in seconds
         size: 6830126, // size of the video in bytes
-        bitrate: 15429777 // bitrate of the video in bits per second
+        bitrate: 15429777 // bitrate of the video in bits per second,
+        videoMime: 'video/3gpp' // (android only) MIME type of the video,
+        audioMime: 'audio/mp4a-latm' // (android only), MIME type of the audio track in video
     }
 }
 ```
