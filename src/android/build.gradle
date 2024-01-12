@@ -5,7 +5,7 @@ repositories{
 }
 
 dependencies {
-    compile 'com.github.observaInc:android-transcoder:master'
+    compile 'compile 'com.github.ergovia-devs:android-transcoder:v0.1.10R_ergovia'
 }
 
 android {
